@@ -1,0 +1,5 @@
+# Project exclude paths
+/api-gateway/target/
+/customer-service/target/
+/lib/target/
+/payment-service/target/

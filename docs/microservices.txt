@@ -1,0 +1,100 @@
+Database choice
+---------------
+https://docs.microsoft.com/en-us/azure/architecture/guide/design-principles/use-the-best-data-store
+https://docs.microsoft.com/en-us/azure/architecture/guide/technology-choices/data-store-overview
+
+Managing data in microservices
+------------------------------
+https://docs.microsoft.com/en-us/azure/architecture/microservices/design/data-considerations
+
+Event sourcing
+--------------
+https://docs.microsoft.com/en-us/azure/architecture/patterns/event-sourcing
+
+
+Domain model
+---------------
+https://docs.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/microservice-domain-model
+
+
+API gateway/BFF
+-----------------------------------------
+https://docs.microsoft.com/en-us/dotnet/architecture/microservices/architect-microservice-container-applications/direct-client-to-microservice-communication-versus-the-api-gateway-pattern
+https://dzone.com/articles/the-role-of-api-gateways-in-api-security
+https://tsh.io/blog/design-patterns-in-microservices-api-gateway-bff-and-more/
+
+
+Resilient communication between services
+-----------------------------------------
+Retries with back off  - https://www.baeldung.com/spring-retry
+Circuit breaker - https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker
+                - https://www.baeldung.com/spring-cloud-circuit-breaker
+Cahcing -  https://www.baeldung.com/spring-cache-tutorial
+Message retires and idempotent message handlers  - https://cloud.spring.io/spring-cloud-stream-binder-rabbit/multi/multi_rabbit-dlq-processing.html
+
+
+Service discovery
+-----------------
+https://www.baeldung.com/spring-cloud-netflix-eureka
+check kubernetes
+
+
+Security (identity server  - oauth & openid connect)
+authentication - https://medium.com/aspnetrun/securing-microservices-with-identityserver4-with-oauth2-and-openid-connect-fronted-by-ocelot-api-49ea44a0cf9e
+authorization - https://en.wikipedia.org/wiki/Confused_deputy_problem
+network security - https://securityintelligence.com/posts/how-to-secure-microservices-architecture/
+
+
+
+
+Notes from Microservice Patterns
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+1. Messaging in microservices (chapter 3)
+a) The types of message that should be used in microservices is Domain events and Command events
+b) One problem is message ordering when scalling consumers. This is solved by using sharded channels in Kafka.
+c) Another problem is handling duplicate mesasges. Ideally the broker should preserve ordering when redelivering messages. In case this is not possible, the solutions are to write idempotent handlers or track messages and discard
+duplicates.
+d) Often we need to produce messages as part of a transaction. We should use the transactional outbox pattern, that stores the message in a DB table as part of the DB tx. The messages is then send with the help of a message relay that 
+either pools the table or reads the transaction log (the preffered way). Attention: For msg consumtion the best effort 1pc implemented in MDGW might still be useful, as it guarantees that SF message is consumed or put on DLQ. There might be better ways of doing this,
+for example when consuming the mesasge we use the transaction outbox pattern, and if the db transaction fails, an error should be thrown and the consumed message is added to DLQ (to do check if it actually happens).
+
+2. Synscronous api (chapter 3)
+Communication between microservices should be done async via messaging. However, when REST api is exposed to outside client, we can replicate data which is useful for GET requests. For POST/PUT/DELETE requests, replication does not solve the 
+problem of how a service updates data owned by another service. Another option would be to finish processing after returing a response. 
+FOr GET requets, if communication absolutely needs to be sync between services (maybe replicating data is too much),we need to implement circuit breaker pattern and recover from unavailable service by returing an error or a default/cached value
+ 
+3. Saga
+https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/saga/saga
+A series of local transactions that are coordinated using aysnc messaging and are meant to bring eventual consistency across microservices.They are ACD which means isolation is missing. In order th treat this, we use countermeasures like
+semantic lock(like a pending status) etc. Transactions need to be compensated if one microservice fails to commit it's local transaction. The compensation happens in reverse order. There are 3 types of local transactions : compensatable, pivot (the go/no go point) and retriable (are guaranteed to succeed)
+Sagas can be done by using coreography or orchestration (preffered way which can be done with state machine diagram)
+Eventuate tram is a framework that helps with implementing saga. Check also Axon
+
+
+4. Aggregates
+Objects that belong together and that have a boundry. Account is an example of aggreagate. It is the root entity. It contains BankDetails, Addresses etc. All operations are done on the whole aggregate.
+
+5. Event sourcing persists agreggates as a series of events.
+
+6. CQRS splits a persistent model and modules that use it into 2 parts: the command side and the query side. The reason is that API composition is not always the best solution to querying multple services, as the result of the queries
+can be large and we need to do in memory joins. The query side is synchroinized with the command side by subscribing to events published by the command side.
+
+API Gateway
+Orchstrator makes request to multiple services and combines results. Api gateway can do orchestration, but its main responsability is to act like a proxy, do security etc
+
+
+How to choose database type
+https://microservices.io/patterns/data/database-per-service.html
+
+
+Things to learn for POC:
+1. Concurrency / Reactive programming / Event driven async calls / NIO/ Spring reactor/ Reactive streams / web sockets/ Mono / spring web flux (check page 269 in api gateway chapter)
+
+
+
+
+Audit log vs history
+Audit - From practical standpoint, it means that for pretty much every transaction modifying something in your DB, you need to add a record to an audit table – explaining what exactly was done – and why. For example, a row in the audit table for modification in USERS adding the USER money tends to have information such as “what was done” (USERID, DELTAMONEY, and probably RESULTINGMONEY), “when it was done” (TIMESTAMP), “who has done it” (for example – ADMINID or NULL/USERID).
+History - snapshots of the data. stores the actual changes of the data.
+A merge between history and audit could be done. The audit table can be used as history
